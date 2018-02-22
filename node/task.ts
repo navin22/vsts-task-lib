@@ -712,6 +712,11 @@ export interface FindOptions {
      * symbolic link directories.
      */
     followSymbolicLinks: boolean;
+
+    /** 
+     * If there's any error while finding the files, will continue to search if true else will throw.
+    */
+    continueOnError: boolean;
 }
 
 /**
@@ -768,15 +773,56 @@ export function find(findPath: string, options?: FindOptions): string[] {
             let stats: fs.Stats;
             if (options.followSymbolicLinks) {
                 // use stat (following all symlinks)
-                stats = fs.statSync(item.path);
+                try {
+                    stats = fs.statSync(item.path);
+                }
+                catch (err) {
+                    if(options.continueOnError) {
+                        warning(`Error occurred while following the symlink ${item.path} : ${err}`);
+                        // ignore this path from results
+                        const ignoredItem = result.pop();
+                        debug(`Ignoring ${ignoredItem}, as continueOnError is true`)
+                        continue;
+                    }
+                    else {
+                        throw err;
+                    }
+                }
+                
             }
             else if (options.followSpecifiedSymbolicLink && result.length == 1) {
                 // use stat (following symlinks for the specified path and this is the specified path)
-                stats = fs.statSync(item.path);
+                try {
+                    stats = fs.statSync(item.path);
+                }
+                catch (err) {
+                    if(options.continueOnError) {
+                        warning(`Error occurred while following the specified symlink ${item.path} : ${err}`);
+                        const ignoredItem = result.pop();
+                        debug(`Ignoring ${ignoredItem}, as continueOnError is true`)
+                        continue;
+                    }
+                    else {
+                        throw err;
+                    }
+                }
             }
             else {
                 // use lstat (not following symlinks)
-                stats = fs.lstatSync(item.path);
+                try {
+                    stats = fs.lstatSync(item.path);
+                }
+                catch (err) {
+                    if(options.continueOnError) {
+                        warning(`Error occurred while finding ${item.path} : ${err}`);
+                        const ignoredItem = result.pop();
+                        debug(`Ignoring ${ignoredItem}, as continueOnError is true`)
+                        continue;
+                    }
+                    else {
+                        throw err;
+                    }
+                }
             }
 
             // note, isDirectory() returns false for the lstat of a symlink
@@ -840,7 +886,8 @@ function _debugFindOptions(options: FindOptions): void {
 function _getDefaultFindOptions(): FindOptions {
     return <FindOptions>{
         followSpecifiedSymbolicLink: true,
-        followSymbolicLinks: true
+        followSymbolicLinks: true,
+        continueOnError: false
     };
 }
 
@@ -1161,6 +1208,7 @@ export interface MatchOptions {
     nocomment?: boolean;
     nonegate?: boolean;
     flipNegate?: boolean;
+    continueOnError?: boolean;
 }
 
 /**
